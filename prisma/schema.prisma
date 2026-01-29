@@ -1,0 +1,72 @@
+generator client {
+  provider = "prisma-client-js"
+  output   = "../src/generated/prisma"
+}
+
+datasource db {
+  provider = "postgresql"
+
+}
+
+model Event {
+  id          String   @id @default(uuid())
+  organizerId String   
+  
+  name        String
+  description String?
+  date        DateTime
+  location    String
+  imageUrl    String?  
+  
+  sections    Section[]
+  tickets     Ticket[]
+
+  createdAt   DateTime @default(now())
+  updatedAt   DateTime @updatedAt
+}
+
+model Section {
+  id          String   @id @default(uuid())
+  name        String   
+  price       Decimal  @default(0.0)
+  capacity    Int      
+
+  isReserved  Boolean  @default(false) 
+  rows        Int?   
+  cols        Int?     
+
+  eventId     String
+  event       Event    @relation(fields: [eventId], references: [id], onDelete: Cascade)
+  tickets     Ticket[]
+}
+
+model Ticket {
+  id          String   @id @default(uuid())
+  
+  eventId     String
+  event       Event    @relation(fields: [eventId], references: [id])
+  sectionId   String
+  section     Section  @relation(fields: [sectionId], references: [id])
+  
+  userId      String
+  userEmail   String?
+  userName    String?
+
+  row         Int?
+  col         Int?
+
+  status      TicketStatus @default(PENDING)
+  paymentId   String?      
+
+  createdAt   DateTime @default(now())
+  updatedAt   DateTime @updatedAt
+
+  @@unique([sectionId, row, col])
+}
+
+enum TicketStatus {
+  PENDING
+  PAID
+  CANCELLED
+  CHECKED_IN
+}
