@@ -64,8 +64,8 @@ export default async function PaymentCallbackPage({
           userId,
           userEmail: data.data.customer.email,
           userName,
-          row: seat.row,
-          col: seat.col,
+          row: Number(seat.row),
+          col: Number(seat.col),
           status: TicketStatus.PAID,
         })),
       });
