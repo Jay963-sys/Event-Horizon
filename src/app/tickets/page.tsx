@@ -3,15 +3,21 @@ import { auth } from "@clerk/nextjs/server";
 import { redirect } from "next/navigation";
 import TicketCard from "@/components/TicketCard";
 import Link from "next/link";
-import { ArrowLeft } from "lucide-react";
+import { ArrowLeft, Ticket } from "lucide-react";
 
 export default async function MyTicketsPage() {
   const { userId } = await auth();
   if (!userId) redirect("/");
 
   const tickets = await prisma.ticket.findMany({
-    where: { userId },
-    include: { event: true },
+    where: {
+      userId,
+      status: "PAID",
+    },
+    include: {
+      event: true,
+      section: true,
+    },
     orderBy: { event: { date: "asc" } },
   });
 
@@ -30,7 +36,7 @@ export default async function MyTicketsPage() {
           </div>
           <Link
             href="/events"
-            className="text-sm font-medium text-blue-600 hover:underline"
+            className="text-sm font-bold text-blue-600 hover:text-blue-700 bg-blue-50 px-4 py-2 rounded-lg transition-colors"
           >
             Book more seats
           </Link>
@@ -38,13 +44,19 @@ export default async function MyTicketsPage() {
 
         {/* Empty State */}
         {tickets.length === 0 && (
-          <div className="rounded-2xl border border-dashed border-slate-300 p-12 text-center">
-            <p className="text-slate-500 mb-4">
+          <div className="rounded-2xl border border-dashed border-slate-300 p-12 text-center bg-white">
+            <div className="w-16 h-16 bg-slate-50 rounded-full flex items-center justify-center mx-auto mb-4">
+              <Ticket className="w-8 h-8 text-slate-300" />
+            </div>
+            <h3 className="text-lg font-bold text-slate-900 mb-2">
+              No tickets yet
+            </h3>
+            <p className="text-slate-500 mb-6">
               You haven't booked any tickets yet.
             </p>
             <Link
               href="/events"
-              className="inline-flex items-center gap-2 rounded-lg bg-blue-600 px-4 py-2 text-white font-semibold hover:bg-blue-700"
+              className="inline-flex items-center gap-2 rounded-xl bg-slate-900 px-6 py-3 text-white font-bold hover:bg-slate-800 transition-all"
             >
               <ArrowLeft className="w-4 h-4" /> Browse Events
             </Link>
@@ -64,6 +76,8 @@ export default async function MyTicketsPage() {
                 row: ticket.row,
                 col: ticket.col,
                 userName: ticket.userName,
+                sectionName: ticket.section.name,
+                price: Number(ticket.section.price),
               }}
             />
           ))}

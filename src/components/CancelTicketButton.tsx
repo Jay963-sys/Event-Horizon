@@ -14,7 +14,7 @@ export default function CancelTicketButton({ ticketId }: { ticketId: string }) {
     startTransition(async () => {
       try {
         await cancelTicket(ticketId);
-        router.refresh(); // Ensure the UI updates immediately
+        router.refresh();
       } catch (error) {
         alert("Failed to cancel ticket");
       }
