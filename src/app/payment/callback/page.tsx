@@ -1,8 +1,8 @@
 import { prisma } from "@/lib/db";
 import { redirect } from "next/navigation";
-import { CheckCircle2, XCircle } from "lucide-react";
+import { CheckCircle2, XCircle, AlertTriangle } from "lucide-react";
 import Link from "next/link";
-import { TicketStatus } from "@prisma/client";
+import { TicketStatus } from "@prisma/client"; // Ensure this import is correct
 
 interface PaystackMetadata {
   eventId: string;
@@ -21,7 +21,7 @@ export default async function PaymentCallbackPage({
 
   if (!reference) return redirect("/");
 
-  // 1. Verify Transaction with Paystack
+  // 1. Verify Transaction
   const verifyRes = await fetch(
     `https://api.paystack.co/transaction/verify/${reference}`,
     {
@@ -46,49 +46,16 @@ export default async function PaymentCallbackPage({
     );
   }
 
-  // 2. Extract Data from Metadata
   const metadata = data.data.metadata as PaystackMetadata;
   const { eventId, sectionId, seats, userId, userName } = metadata;
 
-  // 3. BOOK THE TICKETS (Idempotency check: Ensure we haven't already booked for this ref)
-  // Ideally, you'd store the paymentRef in the DB to prevent double booking on page refresh.
-  // For MVP, we'll just check if these exact seats are already taken by this user.
+  // 2. Try to Book Tickets (With Error Reporting)
+  let errorMessage = "";
 
   try {
     await prisma.$transaction(async (tx) => {
-      // If it's general admission (no specific seats), create placeholders
-      const ticketsToCreate =
-        seats.length > 0
-          ? seats
-          : Array(
-              data.data.amount /
-                100 /
-                (data.data.amount / 100 / seats.length || 1),
-            ).fill({ row: null, col: null });
-      // Note: The above math is tricky for GA.
-      // Better logic: We passed 'seats' as empty array for GA, but we need Quantity.
-      // Let's rely on the metadata logic we set up.
-
-      // Simplified Booking Logic:
-      const bookingData =
-        seats.length > 0 ? seats : Array(1).fill({ row: null, col: null });
-      // Note: For General Admission, we need to pass Quantity in metadata in Step 2.
-      // Let's patch Step 2 quickly to include quantity in metadata if needed.
-
-      // Actually, let's just loop over the 'seats' array from metadata.
-      // If it's GA, we need to handle that.
-      // FIX: Let's assume for now we are handling Reserved Seating primarily or we handle GA quantity below.
-
-      const finalSeats =
-        seats.length > 0
-          ? seats
-          : Array(Math.round(data.data.amount / 100 / 1000)).fill({
-              row: null,
-              col: null,
-            }); // Fallback logic is risky.
-
-      // REAL FIX: Just create tickets based on the seats array.
-      // For GA, we will update the initiatePayment to populate the 'seats' array with nulls equal to quantity.
+      // Double check if tickets already exist for this ref to prevent dupes
+      // Note: For MVP we skip strict idempotent check, but we catch unique constraint errors
 
       await tx.ticket.createMany({
         data: seats.map((seat) => ({
@@ -100,15 +67,39 @@ export default async function PaymentCallbackPage({
           row: seat.row,
           col: seat.col,
           status: TicketStatus.PAID,
-          // paymentRef: reference // Optional: Add this field to your schema later
         })),
       });
     });
-  } catch (error) {
-    // If duplicate key error, it means already booked. We can ignore or show success.
-    console.log("Booking likely already exists");
+  } catch (error: any) {
+    console.error("Booking Error:", error);
+    errorMessage = error.message || "Unknown Database Error";
   }
 
+  // 3. IF ERROR OCCURRED, SHOW IT
+  if (errorMessage) {
+    return (
+      <div className="min-h-screen flex flex-col items-center justify-center bg-slate-50 gap-4 p-8 text-center">
+        <div className="w-16 h-16 bg-red-100 rounded-full flex items-center justify-center">
+          <AlertTriangle className="w-8 h-8 text-red-600" />
+        </div>
+        <h1 className="text-2xl font-bold text-slate-900">
+          Payment Verified, but Ticket Creation Failed
+        </h1>
+        <p className="text-slate-600 max-w-md">
+          We received your payment, but our database rejected the ticket
+          creation.
+        </p>
+        <div className="bg-slate-900 text-red-400 p-4 rounded-lg font-mono text-xs text-left w-full max-w-lg overflow-auto">
+          {errorMessage}
+        </div>
+        <p className="text-sm text-slate-500">
+          Please take a screenshot of this page and contact support.
+        </p>
+      </div>
+    );
+  }
+
+  // 4. SUCCESS
   return (
     <div className="min-h-screen flex flex-col items-center justify-center bg-slate-50 gap-6">
       <div className="w-20 h-20 bg-green-100 rounded-full flex items-center justify-center animate-in zoom-in">
