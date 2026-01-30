@@ -2,7 +2,7 @@
 
 import { prisma } from "@/lib/db";
 import { auth, currentUser } from "@clerk/nextjs/server";
-import { redirect } from "next/navigation";
+import { TicketStatus } from "@prisma/client";
 
 export async function initiatePayment(
   eventId: string,
@@ -23,10 +23,28 @@ export async function initiatePayment(
 
   const amountInNaira = Number(section.price) * quantity;
   const amountInKobo = amountInNaira * 100;
-
   const email = user.emailAddresses[0].emailAddress;
-  const seatMetadata =
-    seats.length > 0 ? seats : Array(quantity).fill({ row: null, col: null });
+  const userName = `${user.firstName} ${user.lastName}`;
+
+  if (amountInKobo === 0) {
+    await prisma.ticket.createMany({
+      data: (seats.length > 0
+        ? seats
+        : Array(quantity).fill({ row: null, col: null })
+      ).map((seat) => ({
+        eventId,
+        sectionId,
+        userId,
+        userEmail: email,
+        userName,
+        row: seat.row ? Number(seat.row) : null,
+        col: seat.col ? Number(seat.col) : null,
+        status: TicketStatus.PAID,
+      })),
+    });
+
+    return "/tickets";
+  }
 
   const response = await fetch(
     "https://api.paystack.co/transaction/initialize",
@@ -43,9 +61,9 @@ export async function initiatePayment(
         metadata: {
           eventId,
           sectionId,
-          seats: seatMetadata,
+          seats,
           userId,
-          userName: `${user.firstName} ${user.lastName}`,
+          userName,
         },
       }),
     },
